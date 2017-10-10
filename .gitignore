@@ -1,0 +1,12 @@
+# Python compiled files
+__pycache__/
+*.pyc
+
+# PyCharm
+/.idea/
+
+# Test media
+*.mp4
+*.MP4
+*.avi
+*.AVI
