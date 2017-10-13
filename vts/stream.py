@@ -17,7 +17,8 @@ def main():
             help='right channel input')
     parser.add_argument('--audio', choices=['l', 'r'],
             help='audio source (left / right)')
-    parser.add_argument('--host', default='127.0.0.1',
+    # Default to 239.0.0.1 - UDP multicast
+    parser.add_argument('--host', default='239.0.0.1',
             help='address to bind to')
     parser.add_argument('-p', '--port', default=8100, type=int,
             help='port number to bind to')
