@@ -10,3 +10,5 @@ __pycache__/
 *.MP4
 *.avi
 *.AVI
+*.mjpg
+*.MJPG
