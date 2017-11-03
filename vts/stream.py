@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
 import os
 import signal
@@ -9,7 +9,7 @@ import time
 import threading
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from utils import infile_type, get_primary_ip
+from utils import get_primary_ip
 
 
 g_server = None
@@ -18,16 +18,24 @@ g_threads = []
 g_stop = threading.Event()
 
 
-def stream(source, name, host, port, vstream=0, astream=None, realtime=True):
-    print('Streaming `{}` on rtp://{}:{}'.format(name, host, port))
+def stream(source, name, host, port, vstream=0, astream=None, from_file=False):
+    print('Streaming `{}` from `{}` to rtp://{}:{}'.format(name, source, host, port))
     sdp_filename = os.path.join(g_tempdir.name, name + '.sdp')
 
     # Start FFmpeg
     cmd = ['ffmpeg']
-    if realtime:
-        cmd.append('-re')
+    if from_file:
+        cmd.extend([
+            '-re',
+            '-f', 'mjpeg',
+        ])
+    else:
+        cmd.extend([
+            '-f', 'v4l2',
+            '-pix_fmt', 'mjpeg',
+            '-r', '30',
+        ])
     cmd.extend([
-        '-f', 'mjpeg',
         '-i', source,
         '-c', 'copy',       # copy existing codec
         '-f', 'rtp',        # stream over RTP
@@ -77,10 +85,8 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--left', required=True,
-                        type=lambda f: infile_type(parser, f),
                         help='left channel input')
     parser.add_argument('-r', '--right', required=True,
-                        type=lambda f: infile_type(parser, f),
                         help='right channel input')
     parser.add_argument('--audio', choices=['l', 'r'],
                         help='audio source (left / right)')
@@ -89,7 +95,7 @@ def main():
                         help='HTTP server port number')
     parser.add_argument('--lport', default=8482, type=int,
                         help='left video port number')
-    parser.add_argument('--rport', default=8483, type=int,
+    parser.add_argument('--rport', default=8484, type=int,
                         help='right video port number')
     args = parser.parse_args()
 
@@ -107,6 +113,20 @@ def main():
     audio = args.audio
     hport, lport, rport = args.hport, args.lport, args.rport
 
+    # Start video streams
+    left_thread = threading.Thread(target=stream, name='left',
+                                   args=(left, 'left', host, lport),
+                                   kwargs={'from_file': not left.startswith('/dev/'),
+                                           'astream': 0 if audio == 'l' else None})
+    right_thread = threading.Thread(target=stream, name='right',
+                                    args=(right, 'right', host, rport),
+                                    kwargs={'from_file': not right.startswith('/dev/'),
+                                            'astream': 0 if audio == 'r' else None})
+    g_threads.append(left_thread)
+    g_threads.append(right_thread)
+    left_thread.start()
+    right_thread.start()
+
     # Start HTTP server
     os.chdir(g_tempdir.name)
     g_server = HTTPServer((host, hport), SimpleHTTPRequestHandler)
@@ -114,21 +134,8 @@ def main():
     server_thread = threading.Thread(target=g_server.serve_forever)
     g_threads.append(server_thread)
     server_thread.start()
-    print('Serving files from `{}` on {}:{}'.format(g_tempdir.name, host, hport))
+    print('Serving files from `{}` on http://{}:{}'.format(g_tempdir.name, host, hport))
 
-    # Start video streams
-    left_thread = threading.Thread(target=stream, name='left',
-                                   args=(left, 'left', host, lport),
-                                   kwargs={'realtime': True,
-                                           'astream': 0 if audio == 'l' else None})
-    right_thread = threading.Thread(target=stream, name='right',
-                                    args=(right, 'right', host, rport),
-                                    kwargs={'realtime': True,
-                                            'astream': 0 if audio == 'r' else None})
-    g_threads.append(left_thread)
-    g_threads.append(right_thread)
-    left_thread.start()
-    right_thread.start()
 
     # Register signal handlers
     signal.signal(signal.SIGTERM, terminate)
