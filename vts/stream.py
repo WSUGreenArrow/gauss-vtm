@@ -91,6 +91,7 @@ def main():
     parser.add_argument('--audio', choices=['l', 'r'],
                         help='audio source (left / right)')
     parser.add_argument('--host', help='address to bind to')
+    parser.add_argument('-c', '--client', help='client to stream to')
     parser.add_argument('--hport', default=8080, type=int,
                         help='HTTP server port number')
     parser.add_argument('--lport', default=8482, type=int,
@@ -111,15 +112,16 @@ def main():
     left = os.path.abspath(os.path.realpath(args.left))
     right = os.path.abspath(os.path.realpath(args.right))
     audio = args.audio
+    client = args.client
     hport, lport, rport = args.hport, args.lport, args.rport
 
     # Start video streams
     left_thread = threading.Thread(target=stream, name='left',
-                                   args=(left, 'left', host, lport),
+                                   args=(left, 'left', client, lport),
                                    kwargs={'from_file': not left.startswith('/dev/'),
                                            'astream': 0 if audio == 'l' else None})
     right_thread = threading.Thread(target=stream, name='right',
-                                    args=(right, 'right', host, rport),
+                                    args=(right, 'right', client, rport),
                                     kwargs={'from_file': not right.startswith('/dev/'),
                                             'astream': 0 if audio == 'r' else None})
     g_threads.append(left_thread)
