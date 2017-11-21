@@ -18,7 +18,25 @@ g_threads = []
 g_stop = threading.Event()
 
 
+def save_sdp(filename, stream):
+    # Save SDP to temporary directory for HTTP server
+    line = stream.readline()
+    while line.strip() != 'SDP:':
+        line = stream.readline()
+    with open(filename, 'w') as sdp:
+        line = stream.readline()
+        while line.strip():
+            sdp.write(line)
+            line = stream.readline()
+
+
 def stream(source, name, host, port, vstream=0, astream=None, from_file=False):
+    if not (source and name and host and port):
+        return
+    if not os.path.exists(source):
+        print('Source file does not exist: {}'.format(source))
+        return
+
     print('Streaming `{}` from `{}` to rtp://{}:{}'.format(name, source, host, port))
     sdp_filename = os.path.join(g_tempdir.name, name + '.sdp')
 
@@ -47,26 +65,22 @@ def stream(source, name, host, port, vstream=0, astream=None, from_file=False):
 
     p = subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          universal_newlines=True, bufsize=1)
-
-    # Save SDP to temporary directory for HTTP server
-    line = p.stdout.readline()
-    while line.strip() != 'SDP:':
-        line = p.stdout.readline()
-    with open(sdp_filename, 'w') as sdp:
-        line = p.stdout.readline()
-        while line.strip():
-            sdp.write(line)
-            line = p.stdout.readline()
+    t = threading.Thread(target=save_sdp, args=(sdp_filename, p.stdout))
+    t.daemon = True
+    t.start()
 
     # Wait for streaming to stop
     while p.poll() is None:
         if g_stop.is_set():
             p.send_signal(signal.SIGTERM)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     if not g_stop.is_set():
-        print('Stream `{}` completed.'.format(name))
-        os.unlink(sdp_filename)
+        print('Stream `{}` stopped.'.format(name))
+        try:
+            os.unlink(sdp_filename)
+        except:
+            pass
 
     # If this is the last stream thread, kill the server
     if not os.listdir(g_tempdir.name):
@@ -90,7 +104,8 @@ def main():
                         help='right channel input')
     parser.add_argument('--audio', choices=['l', 'r'],
                         help='audio source (left / right)')
-    parser.add_argument('--host', help='address to bind to')
+    parser.add_argument('--host', help='address to bind to',
+                        default='')
     parser.add_argument('-c', '--client', help='client to stream to')
     parser.add_argument('--hport', default=8080, type=int,
                         help='HTTP server port number')
@@ -100,19 +115,11 @@ def main():
                         help='right video port number')
     args = parser.parse_args()
 
-    # Check for default host
-    host = args.host
-    if host is None:
-        host = get_primary_ip()
-        if host is None:
-            print('Could not detect primary IP address!')
-            return 1
-
     # Parse arguments
     left = os.path.abspath(os.path.realpath(args.left))
     right = os.path.abspath(os.path.realpath(args.right))
     audio = args.audio
-    client = args.client
+    host, client = args.host, args.client
     hport, lport, rport = args.hport, args.lport, args.rport
 
     # Start video streams
@@ -137,7 +144,6 @@ def main():
     g_threads.append(server_thread)
     server_thread.start()
     print('Serving files from `{}` on http://{}:{}'.format(g_tempdir.name, host, hport))
-
 
     # Register signal handlers
     signal.signal(signal.SIGTERM, terminate)
