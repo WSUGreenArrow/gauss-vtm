@@ -1,0 +1,12 @@
+[Unit]
+Description=Green Arrow UAV Stereoscopic System Streaming Service
+After=network.target
+
+[Service]
+User=gauss
+Group=gauss
+Type=simple
+ExecStart=/usr/local/bin/gauss-stream -l /dev/video0 -r /dev/video2 -c 10.107.101.2
+
+[Install]
+WantedBy=multi-user.target
