@@ -9,7 +9,6 @@ import time
 import threading
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from utils import get_primary_ip
 
 
 g_server = None
