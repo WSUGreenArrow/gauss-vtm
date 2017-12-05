@@ -5,12 +5,17 @@ To stream a video, you can use the `stream.py` script from the VTS.
 The script requires that you have both FFmpeg and a version of Python
 installed.
 
+### Linux
+If you're streaming video from a webcam, the script uses Video4Linux2.
+As the name would suggest, this only works on a Linux system. You can
+still test using video sources on Windows, but the documentation will
+assume you're on a Linux system from this point.
+
 ### FFmpeg
 FFmpeg is a ridiculously powerful program that can transcode, mux, and
 work all sorts of magic with a wide variety of multimedia files. So,
 naturally, it's going to be doing most of the heavy lifting.
 
-#### Linux
 If you're on Linux, you can usually install FFmpeg through
 your package manager:
 
@@ -25,63 +30,60 @@ OpenSUSE:
 
 (etc.)
 
-#### Windows
-If you're on Windows, you can grab a [build from Zeranoe][winffmpeg].
-I highly recommend downloading the static version, and if you're on
-64-bit Windows, you should obviously choose the 64-bit build. The version
-is mostly up to you - the one with the date code is built directly from
-the latest Git sources, and the one with a version number is stable.
-Copy the bin\ffmpeg.exe file to the same directory as the streamer script
-so that Python can find it easily.
-
-### Python
-I recommend grabbing Python 3, but hey, if you're still feeling the love
-for 2, I won't take that away from you... I'll let the Python Software
-Foundation do that in [around three years][pep-373].
-
-#### Linux
-The `stream.py` script has been written to work properly with both Python
-2 and Python 3, so you should be fine as long as you have at least one of
-those installed (most Linux distributions have one installed by default).
+### Python 3
+You must have Python 3 installed. The script will not run on Python 2.
 Install Python through your package manager if it isn't already there.
 
-#### Windows
-If you're running Windows, you can grab a copy of Python from
-[the official site][python] if you don't already have it.
-
 ## Running the Streamer
-To run the streamer, open a terminal window or command prompt in the
-`vts` directory and run `python stream.py` (Windows or Linux) or
-`./stream.py` (Linux). You'll get a nice little help message telling
-you that you need to add some arguments to your command-line.
+To run the streamer, open a terminal window in the `vts` directory and
+run `python3 stream.py` or `./stream.py`. You'll get a nice little help
+message telling you that you need to add some arguments to your command
+line.
 
 Specifically, you need to specify a video source for both the left-eye
-and right-eye videos. For testing, you're welcome to make these the exact
-same video if you want to. To specify the videos, just add the `-l` and
-`-r` flags:
+and right-eye videos, as well as a client address. For testing, you're
+welcome to make these raw MJPEG files. To specify the videos, just add
+the `-l` and `-r` flags:
 
-`python stream.py -l left.mp4 -r right.mp4`
+`python stream.py -l left.mjpg -r right.mjpg -c x.x.x.x`
 
-The software currently does not stream video from actual webcams, but that
-should be a trivial change once we obtain hardware to test with.
+If you want to make a media file for testing, you can use FFmpeg to
+convert an existing file:
 
-By default, this will start streaming on the UDP multicast address
-`239.0.0.1` on port `8100`. You can change these settings by adding the
-`--host` and/or `--port` flags to the command-line.
+`ffmpeg -i <original-video> -c:v mjpeg <output-file>.mp4`
+
+When you want to stream live video, all you have to do is swap out the
+video files for video device names. The script assumes that the device
+you choose can output 30fps MJPEG video at 640x480 resolution.
+
+The client parameter needs to specify the IP address to stream to.
+This was added when UDP multicast caused issues with some devices.
+Putting this all together, you get a command line like this:
+
+`python stream.py -l /dev/video0 -r /dev/video2 -c 10.107.101.2`
 
 The command-line help is always available by typing:
 
 `python stream.py -h`
 
-**IMPORTANT:** *At this time, the video must already be encoded with h.264
-before being fed to the script.* You can easily convert an existing video
-with the following command-line:
-
-`ffmpeg -i <original-video> -c:v h264 <output-file>.mp4`
-
-You can then use the re-encoded video file for `-l` and/or `-r`.
-
 ## Checking the Stream
+The streaming script hosts an HTTP server on port 8080 that serves SDP
+files your media player of choice should probably be able to handle.
+These SDP files describe the streams for the left and right videos, and
+you can access them at:
+
+```
+http://ip.of.streaming.device:8080/left.sdp
+http://ip.of.streaming.device:8080/right.sdp
+```
+
+In the VTM, the IP address is 10.107.101.1, so it would look like this:
+
+```
+http://10.107.101.1:8080/left.sdp
+http://10.107.101.1:8080/right.sdp
+```
+
 You can easily check the stream on your local machine with a video player
 like VLC. Again, you can usually get this from your package manager's
 default repositories on Linux, or you can download it from
@@ -92,9 +94,10 @@ Open VLC and browse to `Media` > `Open Network Stream...`:
 
 ![VLC menu][img-vlc-menu]
 
-This should open a dialog box like the one below. Enter the default
-address of `rtp://239.0.0.1:8100`, or modify that based on the options you
-passed to the script with `--host` and `--port`.
+This should open a dialog box like the one below. Enter one of the stream
+addresses, such as the one for the left stream:
+
+`http://ip.of.streaming.device:8080/left.sdp`
 
 Check `Show more options` at the bottom, then change the caching option to
 something low, like 20ms, or eliminate it entirely (0ms).
@@ -111,7 +114,6 @@ After clicking `Play`, you should see the video being streamed from FFmpeg
 
 [winffmpeg]: https://ffmpeg.zeranoe.com/builds/ "Zeranoe FFmpeg Builds"
 [python]: https://python.org "Python Official Website"
-[pep-373]: https://www.python.org/dev/peps/pep-0373/ "Python PEP-373"
 [videolan]: https://www.videolan.org "VideoLAN Website"
 
 [img-vlc-menu]: img/vlc-open-network-stream.png
